@@ -12,6 +12,8 @@
 require 'yaml'
 
 class MiniDb
+  BACKUP_LOCATION = 'minidb.backup'
+  
   def initialize
     @backend = Hash.new
   end
@@ -27,7 +29,7 @@ class MiniDb
   def save
     sleep 3 # pretend it's slow
     
-    File.write("backup-#{Time.now.to_i}", YAML.dump(@backend))
+    File.write(BACKUP_LOCATION, YAML.dump(@backend))
   end
   
   def background_save
@@ -43,4 +45,3 @@ puts db.get('prez')
 
 db.background_save
 puts db.get('prez')
-
