@@ -1,60 +1,71 @@
 require 'socket'
+require 'rack'
+require 'rack/builder'
+require 'http_tools'
 
 class MiniUnicorn
   NUM_WORKERS = 12
   WORKER_PIDS = []
   
   def initialize(port = 8080)
-    # socket(2)
-    @listener = Socket.new(Socket::AF_INET, Socket::SOCK_STREAM)
+    @listener = TCPServer.new(port)
+  end
 
-    # bind(2)
-    @listener.bind(Socket.sockaddr_in(8080, '0.0.0.0'))
-
-    # listen(2)
-    @listener.listen(512)
-
-    # or use this...
-    # TCPServer.new(8080)
+  def load_app
+    rackup_file = ENV.fetch('RU') { './config.ru' }
+    @app, options = Rack::Builder.parse_file(rackup_file)
   end
 
   def start
-    # require rails
-    # require bundler
-    # require app
-    
+    load_app
+
     NUM_WORKERS.times do
       WORKER_PIDS << Process.fork {
         worker_loop
       }
     end
 
+    Signal.trap(:USR2) do
+      reexec
+    end
+    
     Process.waitall
   end
 
-  def worker_loop
-    #loop do
-      # accept(2)
-      client, _ = @listener.accept
+  def reexec
+    puts "starting reexec..."
 
+    fork {
+    }
+
+  end
+
+  def worker_loop
+    loop do
+      # accept(2)
+      client = @listener.accept
+
+      parser = HTTPTools::Parser.new
+      
+      parser.on(:finish) do
+        env = parser.env.merge!("rack.multiprocess" => true)
+        status, header, body = @app.call(env)
+        
+        header["Connection"] = "close"
+        client.write HTTPTools::Builder.response(status, header)
+
+        body.each {|chunk| client.write chunk}
+        body.close if body.respond_to?(:close)
+      end
+      
       # IO.read() reads until EOF
       # readpartial() greedy
       # read() is lazy
-      request = client.read
-
-      # parse request
-      # call Rack
+      request = client.readpartial(4096)
+      parser << request
      
-      client.write "HTTP/1.1 200 OK\r\n"
-      client.write "\r\n"
-      client.write "Content-Type: text/plain\r\n"
-      client.write "Content-Length: 3\r\n"
-      client.write "\r\n"
-      client.write "Hi!"
-      client.write "\r\n\r\n"
-
       client.close
-    #end
+    end
   end
 end
 
