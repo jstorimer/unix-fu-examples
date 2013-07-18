@@ -40,8 +40,12 @@ end
 # Simple testing of the db
 
 db = MiniDb.new
+
 db.set('prez', 'obama')
 puts db.get('prez')
 
 db.background_save
-puts db.get('prez')
+db.set('phaser', 'stun')
+
+db.background_save
+puts db.get('phaser')
