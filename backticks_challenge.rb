@@ -20,14 +20,55 @@
 # end
 
 def my_backticks(cmd)
-  # TODO: implement me
+  reader, writer = IO.pipe
+
+  pid = fork {
+    reader.close
+
+    $stdout.reopen(writer)
+    exec(cmd)
+  }
+
+  Process.wait(pid)
+  writer.close
+  reader.read
 end
 
-if my_backticks('echo foobar') != 'foobar'
+if my_backticks('echo foobar') != "foobar\n"
   raise 'hell'
 end
 
+# Open3.popen2('wc -w') do |stdin, stdout|
+#   stdin.write('How doth the little busy bee')
+#   stdin.close
+#   
+#   puts stdout.read
+# end
+
 def my_popen2(cmd)
-  # TODO: implement me if you can!
+  stdin_reader, stdin_writer = IO.pipe
+  stdout_reader, stdout_writer = IO.pipe
+
+  pid = fork {
+    $stdin.reopen(stdin_reader)
+    $stdout.reopen(stdout_writer)
+
+    exec(cmd)
+  }
+
+  stdout_writer.close
+  stdin_reader.close
+
+  yield stdin_writer, stdout_reader
+
+  Process.wait(pid)
 end
+
+my_popen2('wc -w') do |stdin, stdout|
+  stdin.write('How doth the little busy bee')
+  stdin.close
+
+  puts stdout.read
+end
+
 
