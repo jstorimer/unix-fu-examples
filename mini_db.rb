@@ -33,7 +33,20 @@ class MiniDb
   end
   
   def background_save
-    # TODO: implement me!
+    child_pid = fork {
+      File.open(BACKUP_LOCATION, File::CREAT) do |fh|
+        fh.flock(File::LOCK_EX)
+        save
+      end
+    }
+
+    at_exit {
+      begin
+        Process.waitpid(child_pid)
+      rescue Errno::ECHILD
+      end
+    }
+
   end
 end
 
@@ -49,3 +62,6 @@ db.set('phaser', 'stun')
 
 db.background_save
 puts db.get('phaser')
+
+# exit
+
