@@ -27,12 +27,32 @@ while input = Readline.readline("$ ") do
     #
     # $ ls | grep md | wc -c | pbcopy
 
-    pid = fork {
-      command, *args = Shellwords.split(input)
-      exec(command, *args)
-    }
+    next_stdin = $stdin
+    next_stdout = $stdout
 
-    Process.wait(pid)
+    commands.each_with_index do |command, index|
+      if index+1 == commands.size # last command
+        next_stdout = $stdout
+      else
+        reader, writer = IO.pipe
+        next_stdout = writer
+      end
+
+      pid = fork {
+        $stdin.reopen(next_stdin)
+        $stdout.reopen(next_stdout)
+
+        command, *args = Shellwords.split(command)
+        exec(command, *args)
+      }
+
+      next_stdin.close unless next_stdin == $stdin
+      next_stdout.close unless next_stdout == $stdout
+
+      next_stdin = reader
+    end
+
+    Process.waitall
   end
 end
 
