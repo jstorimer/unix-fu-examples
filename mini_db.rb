@@ -5,9 +5,10 @@
 # In other words, perform the #save, but let the db continue processing 
 # commands.
   
-# Bonus Challenge
+# Bonus Challenges
 # ===============
 # How would you prevent multiple background saves from occuring at the same time?
+# How would you ensure that the DB doesn't exit until all pending saves are finished?
 
 require 'yaml'
 
@@ -27,28 +28,16 @@ class MiniDb
   end
   
   def save
-    sleep 3 # pretend it's slow
-    
-    File.write(BACKUP_LOCATION, YAML.dump(@backend))
+    File.open(BACKUP_LOCATION, 'w') do |file|  
+      sleep 3 # pretend it's slow
+      file.write(YAML.dump(@backend))
+    end
   end
   
   def background_save
-    child_pid = fork {
-      File.open(BACKUP_LOCATION, File::CREAT) do |fh|
-        fh.flock(File::LOCK_EX)
-        save
-      end
-    }
-
-    at_exit {
-      begin
-        Process.waitpid(child_pid)
-      rescue Errno::ECHILD
-      end
-    }
-
   end
 end
+
 
 # Simple testing of the db
 
@@ -62,6 +51,4 @@ db.set('phaser', 'stun')
 
 db.background_save
 puts db.get('phaser')
-
-# exit
 
