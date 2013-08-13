@@ -5,6 +5,7 @@
 # whatever it prints to its $stdout.
 #
 # Hint: you'll need fork(2), exec(2), and pipe(2).
+# Another hint: you'll need IO#reopen :)
 #
 # Bonus challenge
 # ===============
@@ -20,6 +21,18 @@
 # end
 
 def my_backticks(cmd)
+  rd, wr = IO.pipe
+
+  pid = fork {
+    rd.close
+
+    $stdout.reopen(wr)
+    exec(cmd)
+  }
+
+  wr.close
+  Process.wait(pid)
+  rd.read
 end
 
 if my_backticks('echo foobar') != "foobar\n"
@@ -34,6 +47,25 @@ end
 # end
 
 def my_popen2(cmd)
+  stdin_reader, stdin_writer = IO.pipe
+  stdout_reader, stdout_writer = IO.pipe
+
+  pid = fork {
+    stdin_writer.close
+    $stdin.reopen(stdin_reader)
+
+    stdout_reader.close
+    $stdout.reopen(stdout_writer)
+
+    exec(cmd)
+  }
+
+  stdin_reader.close
+  stdout_writer.close
+
+  yield stdin_writer, stdout_reader
+
+  Process.wait(pid)
 end
 
 my_popen2('wc -w') do |stdin, stdout|
@@ -42,5 +74,4 @@ my_popen2('wc -w') do |stdin, stdout|
 
   puts stdout.read
 end
-
 

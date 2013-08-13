@@ -33,18 +33,36 @@ class MiniUnicorn
         shutdown
       when :USR2
         reexec
+      when :CHLD
+        pid = Process.wait
+
+        if CHILD_PIDS.delete(pid)
+          spawn_worker
+        end
       end
     end
   end
   
   def trap_signals
-    [:INT, :QUIT, :TERM, :USR2].each do |sig|
+    [:INT, :QUIT, :TERM, :USR2, :CHLD].each do |sig|
       Signal.trap(sig) { 
         SIGNAL_QUEUE << sig
         SELF_PIPE_W.write_nonblock('.')
       }
     end
   end
+
+  # shell
+  #   $ ruby foo.rb
+  #
+  #   # how the shell spawns commands
+  #   pid = fork {
+  #     exec 'ruby mini-unicorn.rb'
+  #       => fork { exec }
+  #   }
+  #
+  #   wait(pid)
+  #
 
   def reexec
     fork {
@@ -76,14 +94,26 @@ class MiniUnicorn
     $PROGRAM_NAME = "MiniUnicorn master"
   end
 
+  # config
+  #
+  # after_fork do
+  #   ActiveRecord::Base.establish_connection
+  #   Redis::Client.reconnect
+  # end
+  # 
+
   def spawn_workers
     NUM_WORKERS.times do |num|
-      CHILD_PIDS << fork {
-        $PROGRAM_NAME = "MiniUnicorn worker ##{num}"
-        trap_child_signals
-        worker_loop
-      }
+      spawn_worker(num)
     end
+  end
+
+  def spawn_worker(num)
+    CHILD_PIDS << fork {
+      $PROGRAM_NAME = "MiniUnicorn worker ##{num}"
+      trap_child_signals
+      worker_loop
+    }
   end
 
   def load_app
