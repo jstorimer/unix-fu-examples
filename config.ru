@@ -1,5 +1,5 @@
 app = lambda do |env|
-  body = "Hello, World!"
+  body = "Goodbye, World!"
   [200, {"Content-Type" => "text/plain", "Content-Length" => body.length.to_s}, [body]]
 end
 
