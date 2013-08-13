@@ -19,6 +19,9 @@ while input = Readline.readline("$ ") do
     # how would you spawn them both and hook up the pipeline?
     #
     # $ ls | grep md
+    
+
+   
     # 
     # Bonus challenge
     # ===============
@@ -26,13 +29,45 @@ while input = Readline.readline("$ ") do
     # how would you spawn them all and hook up pipes between them?
     #
     # $ ls | grep md | wc -c | pbcopy
+    #
+    # ls(grep('md', wc(pbcopy))))
+    #
+    # ls 
+    # grep
+    # wc
+    # pbcopy
+    
+    #
+    # ls(30)
+    # ls grep wc pbcopy
+    
+    next_stdout = $stdout
+    next_stdin = $stdin
 
-    pid = fork {
-      command, *args = Shellwords.shellsplit(input)
-      exec(command, *args)
-    }
+    commands.each_with_index do |command, index|
+      if index+1 == commands.size
+        # if this is the last command
+        next_stdout = $stdout
+      else
+        reader, writer = IO.pipe
+        next_stdout = writer
+      end
+    
+      pid = fork {
+        $stdin.reopen(next_stdin)
+        $stdout.reopen(next_stdout)
 
-    Process.wait(pid)
+        program, *args = Shellwords.shellsplit(command)
+        exec(program, *args)
+      }
+
+      next_stdout.close unless next_stdout == $stdout
+      next_stdin.close unless next_stdin == $stdin
+      
+      next_stdin = reader
+    end
+
+    Process.waitall
   end
 end
 
