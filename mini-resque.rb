@@ -1,32 +1,44 @@
-class LongRunningJob
+class LongSlowJob
   def self.perform
     # do the heavy lifting
-    puts 'phew, that was a lot'
+    puts "phew, that was tough"
   end
 end
 
+# Resque.enqueue(LongSlowJob)
+
 class MiniResque
-  # gets the next job from redis
   def self.reserve
-    LongRunningJob
+    # pretend this is popped from Redis
+    LongSlowJob
   end
 
-  def self.work
-    loop do
-      # loaded rails
-      # laoded app
-      child_pid = fork {
-        50.times do
+  def self.work_one_job(strategy)
+    case strategy
+    when :inproc
+      job = reserve
+      job.perform
+
+      # bloat
+      # 1kb
+      # 5000 jobs/min
+
+    when :forking
+      # pristine state
+      
+      pid = fork {
+        50.times {
           job = reserve
-          job.work
-          #
-        end
-        
+          job.perform
+        }
         # exit
       }
-
-      Process.waitpid(child_pid)
+      
+      Process.wait(pid)
     end
   end
 end
+
+MiniResque.work_one_job(:inproc)
+MiniResque.work_one_job(:forking)
 
