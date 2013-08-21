@@ -18,7 +18,6 @@ class MiniDb
   attr_reader :background_save_pid
   def initialize
     @backend = Hash.new
-
   end
   
   def get(key)
