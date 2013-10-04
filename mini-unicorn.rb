@@ -1,4 +1,7 @@
 require 'socket'
+require 'rack'
+require 'rack/builder'
+require 'http_tools'
 
 class MiniUnicorn
   NUM_WORKER = 5
@@ -12,7 +15,7 @@ class MiniUnicorn
   end
 
   def start
-    # load_app
+    load_app
     set_program_name
     spawn_workers
     trap_signals
@@ -42,10 +45,16 @@ class MiniUnicorn
     end
   end
 
+  def load_app
+    rackup_file = ENV.fetch('RU') { './config.ru' }
+    @app, _ = Rack::Builder.parse_file(rackup_file)
+  end
+
   def reexec
     puts "Going for hot restart..."
 
     fork {
+      $PROGRAM_NAME = "MiniUnicorn (New Parent)"
       exec "ruby", "mini-unicorn.rb"
     }
   end
@@ -73,6 +82,10 @@ class MiniUnicorn
     WORKER_PIDS << Process.fork {
       $PROGRAM_NAME = "MiniUnicorn (Worker ##{num})"
 
+      # after_fork
+      #   ActiveRecord::Base.establish_connecetion
+      #   Redis::Client.reconnect
+
       Signal.trap(:INT) {
         # gracefully finish the current request and then exit
         exit
@@ -80,16 +93,29 @@ class MiniUnicorn
 
       worker_loop
     }
-
   end
 
   def worker_loop
     loop do
-      client, _ = @listener.accept
+      connection, _ = @listener.accept
+      
+      raw_request = connection.readpartial(4096)
 
-      data = client.readpartial(512)
-      client.write(data)
-      client.close
+      parser = HTTPTools::Parser.new
+
+      parser.on(:finish) do
+        env = parser.env.merge!("rack.multiprocess" => true)
+        status, header, body = @app.call(env)
+
+        header["Connection"] = "close"
+        connection.write HTTPTools::Builder.response(status, header)
+
+        body.each {|chunk| connection.write chunk}
+        body.close if body.respond_to?(:close)
+      end
+
+      parser << raw_request
+      connection.close
     end
   end
 end

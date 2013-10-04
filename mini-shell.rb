@@ -3,14 +3,14 @@ require 'shellwords'
 
 BUILTINS = {
   'exit' => -> { exit },
-  'cd' => Proc.new { |dir| Dir.chdir(dir) }
+  'cd'   => ->(dir) { Dir.chdir(dir) },
+  'exec' => ->(cmd) { exec(cmd) }
 }
 
 while input = Readline.readline("$ ") do
-  program, *args = Shellwords.split(input)
 
-  if BUILTINS.has_key?(program)
-    BUILTINS[program].call(*args)
+  if BUILTINS.has_key?(input)
+    BUILTINS[input].call
 
   else
     commands = input.split("|")
@@ -23,7 +23,29 @@ while input = Readline.readline("$ ") do
     #
     # $ ls | grep md
     
-
+#    rd, wr = IO.pipe
+#
+#    # ls
+#    pid = fork {
+#      rd.close
+#      $stdout.reopen(wr)
+#
+#      program, *args = Shellwords.split(commands[0])
+#      exec(program, *args)
+#    }
+#
+#    # grep
+#    pid = fork {
+#      wr.close
+#      $stdin.reopen(rd)
+#
+#      program, *args = Shellwords.split(commands[1])
+#      exec(program, *args)
+#    }
+#
+#    rd.close
+#    wr.close
+#    Process.waitall
    
     # 
     # Bonus challenge
@@ -32,12 +54,33 @@ while input = Readline.readline("$ ") do
     # how would you spawn them all and hook up pipes between them?
     #
     # $ ls | grep md | wc -c | pbcopy
+   
+    next_stdout = $stdout
+    next_stdin = $stdin
+    
+    commands.each_with_index do |command, index|
+      if index+1 == commands.size # the last command
+        next_stdout = $stdout
+      else
+        reader, writer = IO.pipe
+        next_stdout = writer
+      end
 
-    pid = fork {
-      exec(program, *args)
-    }
+      pid = fork {
+        $stdout.reopen(next_stdout)
+        $stdin.reopen(next_stdin)
 
-    Process.wait(pid)
+        program, *args = Shellwords.split(command)
+        exec(program, *args)
+      }
+
+      next_stdout.close unless next_stdout == $stdout
+      next_stdin.close unless next_stdin == $stdin
+
+      next_stdin = reader
+    end
+
+    Process.waitall
   end
 end
 
